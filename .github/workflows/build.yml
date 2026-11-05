@@ -1,0 +1,24 @@
+name: iOS Cloud Build
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+  build:
+    runs-on: macos-15  # 使用 GitHub 提供的最新雲端 macOS 環境
+
+    steps:
+    - name: Checkout Code
+      uses: actions/checkout@v4
+
+    - name: Select Xcode Version
+      run: sudo xcode-select -s /Applications/Xcode_16.app # 指定 Xcode 版本
+
+    - name: Build iOS App
+      run: |
+        cd FaceTrackerIOS
+        # CODE_SIGNING_ALLOWED=NO 可以讓雲端在沒有蘋果憑證的情況下強行通過編譯驗證
+        xcodebuild -project *.xcodeproj -scheme FaceTrackerIOS -sdk iphoneos clean build CODE_SIGNING_ALLOWED=NO
