@@ -20,5 +20,23 @@ jobs:
     - name: Build iOS App
       run: |
         cd FaceTrackerIOS
-        # CODE_SIGNING_ALLOWED=NO 可以讓雲端在沒有蘋果憑證的情況下強行通過編譯驗證
-        xcodebuild -project *.xcodeproj -scheme FaceTrackerIOS -sdk iphoneos clean build CODE_SIGNING_ALLOWED=NO
+        
+        # 1. 自動尋找目錄下的第一個 .xcodeproj 檔案名稱
+        PROJECT_FILE=$(ls -d *.xcodeproj | head -n 1)
+        
+        # 2. 如果找不到專案檔，輸出提示並中斷，避免盲目執行
+        if [ -z "$PROJECT_FILE" ]; then
+          echo "錯誤：在 FaceTrackerIOS 目錄下找不到任何 .xcodeproj 檔案！"
+          exit 1
+        fi
+        
+        echo "正在使用專案檔: $PROJECT_FILE 進行編譯..."
+        
+        # 3. 使用變數代入正確的專案名稱，並加上 -allowProvisioningDeviceRegistration 確保編譯順暢
+        xcodebuild -project "$PROJECT_FILE" \
+                   -scheme "FaceTrackerIOS" \
+                   -sdk iphoneos \
+                   -configuration Debug \
+                   clean build \
+                   CODE_SIGNING_ALLOWED=NO \
+                   CODE_SIGNING_REQUIRED=NO
