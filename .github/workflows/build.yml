@@ -1,42 +1,62 @@
-name: iOS Cloud Build
+name: Build IPA
 
 on:
-  push:
-    branches: [ "main" ]
-  pull_request:
-    branches: [ "main" ]
+  workflow_dispatch: # 允許在 Actions 頁面手動觸發編譯
 
 jobs:
   build:
-    runs-on: macos-15  # 使用 GitHub 提供的最新雲端 macOS 環境
+    runs-on: macos-latest # iOS 編譯必須在 macOS 環境下執行
 
     steps:
-    - name: Checkout Code
+    - name: Checkout repository
       uses: actions/checkout@v4
 
-    - name: Select Xcode Version
-      run: sudo xcode-select -s /Applications/Xcode_16.app # 指定 Xcode 版本
-
-    - name: Build iOS App
+    - name: Set up Xcode version
       run: |
-        cd FaceTrackerIOS
+        # 選擇合適的 Xcode 版本（可根據需求調整，例如 Xcode_15.0.app）
+        sudo xcode-select -s /Applications/Xcode.app
+
+    - name: Install XcodeGen
+      run: |
+        brew install xcodegen
+
+    - name: Generate Xcode Project
+      run: |
+        # 根據專案中的 project.yml 生成 .xcodeproj
+        xcodegen generate
+
+    - name: Build and Archive
+      run: |
+        # 建立放置封存檔與 IPA 的資料夾
+        mkdir -p build
         
-        # 1. 自動尋找目錄下的第一個 .xcodeproj 檔案名稱
-        PROJECT_FILE=$(ls -d *.xcodeproj | head -n 1)
+        # 尋找產生的專案名稱（通常會與資料夾或 project.yml 定義的名稱相同）
+        # 這裡預設為 FaceTracker.xcodeproj，若名稱不同請自行修正
+        SCHEME_NAME=$(xcodebuild -list -json | json Project.Targets[0] || echo "FaceTracker")
         
-        # 2. 如果找不到專案檔，輸出提示並中斷，避免盲目執行
-        if [ -z "$PROJECT_FILE" ]; then
-          echo "錯誤：在 FaceTrackerIOS 目錄下找不到任何 .xcodeproj 檔案！"
-          exit 1
-        fi
-        
-        echo "正在使用專案檔: $PROJECT_FILE 進行編譯..."
-        
-        # 3. 使用變數代入正確的專案名稱，並加上 -allowProvisioningDeviceRegistration 確保編譯順暢
-        xcodebuild -project "$PROJECT_FILE" \
-                   -scheme "FaceTrackerIOS" \
-                   -sdk iphoneos \
-                   -configuration Debug \
-                   clean build \
-                   CODE_SIGNING_ALLOWED=NO \
-                   CODE_SIGNING_REQUIRED=NO
+        echo "正在編譯 Scheme: $SCHEME_NAME"
+
+        # 進行不簽名的封存 (Unsigned Archive)
+        xcodebuild archive \
+          -project *.xcodeproj \
+          -scheme "$SCHEME_NAME" \
+          -configuration Release \
+          -archivePath build/FaceTracker.xcarchive \
+          CODE_SIGNING_ALLOWED=NO \
+          CODE_SIGNING_REQUIRED=NO \
+          CODE_SIGN_IDENTITY=""
+
+    - name: Package IPA (Ad-Hoc / Unsigned)
+      run: |
+        # 將編譯出來的 .app 檔案打包成 .ipa 格式，方便 AltStore 等工具安裝
+        mkdir -p build/Payload
+        cp -r build/FaceTracker.xcarchive/Products/Applications/*.app build/Payload/
+        cd build
+        zip -r FaceTracker-ipa.ipa Payload
+        mv FaceTracker-ipa.ipa FaceTracker.ipa
+
+    - name: Upload Artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: FaceTracker-ipa # README 中要求的下載名稱
+        path: build/FaceTracker.ipa
