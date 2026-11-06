@@ -1,7 +1,11 @@
 name: Build IPA
 
 on:
-  workflow_dispatch: # 允許在 Actions 頁面手動觸發編譯
+  push:
+    branches: [ "main" ] # 每次 push 到 main 分支時，會自動觸發編譯
+  pull_request:
+    branches: [ "main" ] # 每次對 main 提出 PR 時，也會自動觸發編譯
+  workflow_dispatch:     # 同時保留在 Actions 頁面手動點擊觸發的功能
 
 jobs:
   build:
@@ -13,7 +17,7 @@ jobs:
 
     - name: Set up Xcode version
       run: |
-        # 選擇合適的 Xcode 版本（可根據需求調整，例如 Xcode_15.0.app）
+        # 選擇最新穩定的 Xcode 版本
         sudo xcode-select -s /Applications/Xcode.app
 
     - name: Install XcodeGen
@@ -30,13 +34,11 @@ jobs:
         # 建立放置封存檔與 IPA 的資料夾
         mkdir -p build
         
-        # 尋找產生的專案名稱（通常會與資料夾或 project.yml 定義的名稱相同）
-        # 這裡預設為 FaceTracker.xcodeproj，若名稱不同請自行修正
-        SCHEME_NAME=$(xcodebuild -list -json | json Project.Targets[0] || echo "FaceTracker")
-        
+        # 自動尋找產生的專案 Target/Scheme 名稱，若找不到則預設為 FaceTracker
+        SCHEME_NAME=$(xcodebuild -list -json | json Project.Targets || echo "FaceTracker")
         echo "正在編譯 Scheme: $SCHEME_NAME"
 
-        # 進行不簽名的封存 (Unsigned Archive)
+        # 進行免證書、不簽名的封存 (Unsigned Archive)
         xcodebuild archive \
           -project *.xcodeproj \
           -scheme "$SCHEME_NAME" \
@@ -46,9 +48,9 @@ jobs:
           CODE_SIGNING_REQUIRED=NO \
           CODE_SIGN_IDENTITY=""
 
-    - name: Package IPA (Ad-Hoc / Unsigned)
+    - name: Package IPA (Unsigned)
       run: |
-        # 將編譯出來的 .app 檔案打包成 .ipa 格式，方便 AltStore 等工具安裝
+        # 將編譯出來的 .app 檔案打包成 .ipa 格式
         mkdir -p build/Payload
         cp -r build/FaceTracker.xcarchive/Products/Applications/*.app build/Payload/
         cd build
@@ -58,5 +60,5 @@ jobs:
     - name: Upload Artifact
       uses: actions/upload-artifact@v4
       with:
-        name: FaceTracker-ipa # README 中要求的下載名稱
+        name: FaceTracker-ipa # README 要求的下載名稱
         path: build/FaceTracker.ipa
